@@ -1,0 +1,1274 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Сводный кошелёк</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Кошелёк">
+<meta name="theme-color" content="#1d6b52">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Unbounded:wght@500;600&display=swap">
+<style>
+/* Layout: одна колонка до 560px, шапка с месяцем сверху, таб-бар снизу, листы редактирования выезжают снизу */
+:root {
+  --bg: #f3f5f2;
+  --surface: #ffffff;
+  --ink: #17211d;
+  --muted: #5f6b65;
+  --line: #dde3de;
+  --accent: #1d6b52;
+  --accent-soft: #e2efe8;
+  --gold: #b07a12;
+  --gold-soft: #f6ecd6;
+  --bad: #b23a2c;
+  --bad-soft: #f8e4e1;
+  --good: #24794f;
+  --f-display: "Unbounded", "Golos Text", system-ui, sans-serif;
+  --f-body: "Golos Text", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1513; --surface: #18201d; --ink: #e7ece9; --muted: #98a59f; --line: #2a3430;
+  --accent: #5cc39b; --accent-soft: #1b3229; --gold: #e0ac45; --gold-soft: #33290f;
+  --bad: #f08a7c; --bad-soft: #3a1f1b; --good: #6fd09f; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0f1513; --surface: #18201d; --ink: #e7ece9; --muted: #98a59f; --line: #2a3430;
+  --accent: #5cc39b; --accent-soft: #1b3229; --gold: #e0ac45; --gold-soft: #33290f;
+  --bad: #f08a7c; --bad-soft: #3a1f1b; --good: #6fd09f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--f-body); -webkit-font-smoothing: antialiased; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+button, input, select, textarea { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wrap { max-width: 560px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+header.top .wrap { display: flex; align-items: center; gap: 8px; padding-block: 10px; }
+.brand { font: 600 15px/1 var(--f-display); letter-spacing: .01em; flex: 1; min-width: 0; }
+.month { display: flex; align-items: center; gap: 2px; }
+.month b { font-weight: 600; min-width: 112px; text-align: center; }
+.iconbtn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; cursor: pointer; font-size: 18px; line-height: 1; }
+.iconbtn:disabled { opacity: .35; cursor: default; }
+.iconbtn.add { background: var(--accent); color: var(--bg); border-color: var(--accent); font-size: 22px; }
+
+main { padding-block: 16px 110px; display: flex; flex-direction: column; gap: 18px; }
+section.view[hidden] { display: none; }
+section.view { display: flex; flex-direction: column; gap: 18px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.card h2 { margin: 0; font: 600 13px/1.2 var(--f-body); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.row > :first-child { min-width: 0; }
+.big { font: 600 30px/1.1 var(--f-display); letter-spacing: -.01em; }
+.mid { font: 600 20px/1.1 var(--f-display); }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; padding: 3px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.pill.gold { background: var(--gold-soft); color: var(--gold); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.plain { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+
+.hero { display: grid; gap: 4px; padding-block: 4px; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.split > div { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 2px; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.cats { display: grid; gap: 10px; }
+.cat { display: grid; gap: 5px; cursor: pointer; background: none; border: 0; padding: 0; text-align: left; }
+.cat .bar { height: 8px; border-radius: 6px; background: var(--line); overflow: hidden; }
+.cat .bar i { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
+.cat:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+
+.chart svg { width: 100%; height: auto; display: block; }
+.chart text { fill: var(--muted); font: 11px var(--f-body); }
+.chart .lbl { fill: var(--ink); font-weight: 600; }
+
+.list { display: flex; flex-direction: column; }
+.day { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; padding: 14px 2px 6px; display: flex; justify-content: space-between; }
+.tx { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 11px 14px; background: var(--surface); border: 1px solid var(--line); border-top-width: 0; cursor: pointer; text-align: left; width: 100%; }
+.tx:first-of-type, .day + .tx { border-top-width: 1px; border-top-left-radius: var(--r); border-top-right-radius: var(--r); }
+.tx.last { border-bottom-left-radius: var(--r); border-bottom-right-radius: var(--r); }
+.tx .t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tx .a { font-weight: 600; text-align: right; }
+.tx .a.in { color: var(--good); }
+.tx .a.int { color: var(--muted); }
+.tx .s { font-size: 12.5px; color: var(--muted); grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tx:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.search { display: flex; gap: 8px; }
+input[type=search], input[type=text], input[type=number], input[type=date], select, textarea {
+  width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.seg { display: flex; gap: 4px; padding: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow-x: auto; }
+.seg button { flex: 1; border: 0; background: none; padding: 7px 10px; border-radius: 9px; cursor: pointer; white-space: nowrap; font-size: 14px; color: var(--muted); }
+.seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 11px; padding: 11px 16px; font-weight: 600; cursor: pointer; text-align: center; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.btn.danger { color: var(--bad); }
+.btn.wide { width: 100%; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btns .btn { flex: 1; }
+label.f { display: grid; gap: 5px; font-size: 13px; color: var(--muted); }
+label.f > span { font-weight: 500; }
+.fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+
+.drop { border: 1.5px dashed var(--line); border-radius: var(--r); padding: 22px 16px; text-align: center; display: grid; gap: 8px; justify-items: center; background: var(--surface); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.checks { display: grid; gap: 6px; font-size: 14px; }
+.checks div { display: grid; grid-template-columns: 22px 1fr auto; gap: 6px; align-items: baseline; }
+.ok { color: var(--good); font-weight: 700; }
+.warn { color: var(--gold); font-weight: 700; }
+.err { color: var(--bad); font-weight: 700; }
+.note { font-size: 13px; color: var(--muted); }
+.banner { border-radius: var(--r); padding: 12px 14px; background: var(--gold-soft); color: var(--ink); font-size: 14px; }
+.empty { text-align: center; padding: 28px 12px; display: grid; gap: 8px; justify-items: center; }
+.empty .mid { max-width: 22ch; text-wrap: balance; }
+ol.steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14px; }
+
+nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+nav.tabs .in { max-width: 560px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+nav.tabs button { border: 0; background: none; padding: 9px 4px 10px; display: grid; justify-items: center; gap: 3px; font-size: 11.5px; color: var(--muted); cursor: pointer; }
+nav.tabs button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+nav.tabs button[aria-current=page] { color: var(--accent); font-weight: 600; }
+
+dialog.sheet { border: 0; padding: 0; margin: auto auto 0; width: 100%; max-width: 560px; max-height: 88vh; border-radius: 18px 18px 0 0; background: var(--bg); color: var(--ink); }
+dialog.sheet::backdrop { background: rgba(10, 16, 14, .45); }
+dialog.sheet .in { padding: 18px max(16px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: grid; gap: 14px; }
+dialog.sheet h3 { margin: 0; font: 600 17px/1.25 var(--f-display); }
+.orig { font-size: 13px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; word-break: break-word; }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 20; background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px; max-width: calc(100% - 32px); }
+@media (prefers-reduced-motion: no-preference) { dialog.sheet[open] { animation: up .22s ease-out; } @keyframes up { from { transform: translateY(24px); opacity: .6; } } }
+@media (max-width: 380px) { .big { font-size: 26px; } .month b { min-width: 96px; } }
+:root { padding-top: env(safe-area-inset-top, 0px); }
+body { margin: 0; }
+[hidden] { display: none !important; }
+</style>
+
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div class="brand">Сводный кошелёк</div>
+  <div class="month" id="monthNav">
+    <button class="iconbtn" id="mPrev" aria-label="Предыдущий месяц">‹</button>
+    <b id="mLabel">—</b>
+    <button class="iconbtn" id="mNext" aria-label="Следующий месяц">›</button>
+  </div>
+  <button class="iconbtn add" id="addBtn" aria-label="Добавить операцию">+</button>
+</div></header>
+
+<main class="wrap">
+  <div class="banner" id="modeBanner" hidden></div>
+
+  <section class="view" id="v-overview"></section>
+  <section class="view" id="v-ops" hidden>
+    <div class="search"><input type="search" id="q" placeholder="Поиск: место, человек, сумма" autocomplete="off"></div>
+    <div class="seg" id="opsFilter">
+      <button data-f="all" aria-pressed="true">Все</button>
+      <button data-f="expense" aria-pressed="false">Траты</button>
+      <button data-f="income" aria-pressed="false">Доходы</button>
+      <button data-f="internal" aria-pressed="false">Свои</button>
+    </div>
+    <div id="opsCat"></div>
+    <div class="list" id="opsList"></div>
+  </section>
+  <section class="view" id="v-import" hidden>
+    <div class="drop" id="drop">
+      <div class="mid">Загрузите выписку</div>
+      <div class="note">PDF из Kaspi Gold или Freedom Bank. Можно сразу несколько файлов.</div>
+      <label class="btn primary" for="pdfIn">Выбрать PDF</label>
+      <input type="file" id="pdfIn" accept="application/pdf,.pdf" multiple hidden>
+    </div>
+    <div id="preview"></div>
+    <div class="card">
+      <h2>Где взять выписку</h2>
+      <ol class="steps">
+        <li><b>Kaspi:</b> Kaspi Gold → «Выписка» → период → сохранить PDF.</li>
+        <li><b>Freedom:</b> карта → «Выписка» → период → PDF.</li>
+        <li>Повторная загрузка того же периода не создаёт дублей.</li>
+      </ol>
+    </div>
+    <div id="history"></div>
+  </section>
+  <section class="view" id="v-accounts" hidden></section>
+</main>
+
+<nav class="tabs"><div class="in">
+  <button data-v="overview" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Обзор</button>
+  <button data-v="ops"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Операции</button>
+  <button data-v="import"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Загрузить</button>
+  <button data-v="accounts"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg>Счета</button>
+</div></nav>
+
+<dialog class="sheet" id="sheet"><div class="in" id="sheetIn"></div></dialog>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script>
+// Разбор PDF-выписок Kaspi Gold и Freedom Bank.
+// Вход: элементы текста со всех страниц [{page, x, y, s}] (координаты PDF, y растёт вверх).
+// Выход: {bank, account, period, balances, summary, rows}. Суммы — в тиынах/центах (целые).
+const StatementParser = (() => {
+  const SYM = { '₸': 'KZT', '$': 'USD', '€': 'EUR', '₽': 'RUB', '¥': 'CNY', '₺': 'TRY' };
+  const CODES = ['KZT', 'USD', 'EUR', 'RUB', 'CNY', 'TRY', 'AED'];
+  const DATE_RE = /^(\d{2})\.(\d{2})\.(\d{2}|\d{4})$/;
+  const JUNK_RE = /Kaspi Bank»|Приложение к Справке|Подлинность справки|QR-код|check-receipt|Сумма заблокирована|Раздел «Краткое|счета» содержит|счетами в Kaspi|^-$/;
+
+  const clean = s => s.replace(/[  ]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  function parseAmount(raw) {
+    const t = clean(raw);
+    const m = t.match(/^([+-])\s*(\d[\d ,.]*?)\s*(₸|\$|€|₽|¥|₺|AED|KZT|USD|EUR|RUB|CNY|TRY)?$/);
+    if (!m) return null;
+    let num = m[2].trim(), dec = '00';
+    const dm = num.match(/[.,](\d{2})$/);
+    if (dm) { dec = dm[1]; num = num.slice(0, -3); }
+    const cents = parseInt(num.replace(/[ ,.]/g, '') || '0', 10) * 100 + parseInt(dec, 10);
+    const cur = SYM[m[3]] || (CODES.includes(m[3]) ? m[3] : null);
+    return { cents: m[1] === '-' ? -cents : cents, cur };
+  }
+
+  function toISO(d) {
+    const m = d.match(DATE_RE);
+    if (!m) return null;
+    const y = m[3].length === 2 ? '20' + m[3] : m[3];
+    return `${y}-${m[2]}-${m[1]}`;
+  }
+
+  function detectBank(items) {
+    const text = items.map(i => i.s).join(' ');
+    if (/Kaspi Gold/.test(text) && /Kaspi Bank/.test(text)) return 'kaspi';
+    if (/Фридом Банк|bankffin|KSNVKZKA/.test(text)) return 'freedom';
+    return null;
+  }
+
+  // Строки таблицы: каждая операция «привязана» к дате в левой колонке,
+  // многострочные ячейки центрированы по вертикали вокруг этой даты.
+  function tableRows(items, cfg) {
+    const byPage = new Map();
+    for (const it of items) {
+      if (!byPage.has(it.page)) byPage.set(it.page, []);
+      byPage.get(it.page).push({ ...it, s: clean(it.s) });
+    }
+    const rows = [];
+    for (const [, list] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
+      const header = list.find(i => i.s === 'Дата' && list.some(j => j.s === 'Детали' && Math.abs(j.y - i.y) < 4));
+      if (!header && !cfg.headerless) continue;
+      const top = header ? header.y - 2 : Infinity;
+      const body = list.filter(i => i.y < top && i.s && !JUNK_RE.test(i.s));
+      const anchors = body.filter(i => i.x < cfg.dateMaxX && DATE_RE.test(i.s)).sort((a, b) => b.y - a.y);
+      if (!anchors.length) continue;
+      const cells = anchors.map(a => ({ a, parts: [] }));
+      for (const it of body) {
+        if (anchors.includes(it)) continue;
+        let best = null, bd = Infinity;
+        for (const c of cells) {
+          const d = Math.abs(c.a.y - it.y);
+          if (d < bd) { bd = d; best = c; }
+        }
+        if (best && bd <= cfg.maxDy) best.parts.push(it);
+      }
+      for (const { a, parts } of cells) {
+        parts.sort((p, q) => q.y - p.y || p.x - q.x);
+        let amount = null, cur = null;
+        const op = [], det = [];
+        for (const p of parts) {
+          if (p.x >= cfg.detailsX) { det.push(p.s); continue; }
+          const am = amount ? null : parseAmount(p.s);
+          if (am) { amount = am; continue; }
+          if (CODES.includes(p.s)) { cur = p.s; continue; }
+          op.push(p.s);
+        }
+        if (!amount) continue;
+        rows.push({
+          date: toISO(a.s),
+          cents: amount.cents,
+          cur: cur || amount.cur || 'KZT',
+          op: op.join(' '),
+          details: det.join(' '),
+        });
+      }
+      cfg.headerless = true; // у Kaspi шапка таблицы только на первой странице выписки
+    }
+    return rows;
+  }
+
+  function sameLineAmount(list, label) {
+    const amt = list.find(i => Math.abs(i.y - label.y) < 4 && i.x > label.x && parseAmount(i.s));
+    return amt ? parseAmount(amt.s).cents : null;
+  }
+
+  function parseKaspi(items) {
+    const rows = tableRows(items, { dateMaxX: 110, detailsX: 300, maxDy: 24, headerless: false });
+    const all = items.map(i => ({ ...i, s: clean(i.s) }));
+    const period = all.map(i => i.s.match(/за период с (\S+) по (\S+)/)).find(Boolean);
+    const avail = [];
+    const summary = {};
+    const labels = { 'Пополнения': 'Пополнение', 'Переводы': 'Перевод', 'Переводы на свои счета': 'Перевод на свой счет',
+      'Покупки': 'Покупка', 'Снятия': 'Снятие', 'Разное': 'Разное', 'Поступления со своих счетов': 'Поступление со своих счетов',
+      'Зачисления кредитов': 'Зачисление кредита' };
+    for (const it of all) {
+      const m = it.s.match(/^Доступно на (\S+?):?$/);
+      if (m) { const v = sameLineAmount(all, it); if (v != null) avail.push({ date: toISO(m[1]), cents: v }); }
+      if (labels[it.s] && summary[labels[it.s]] == null) { const v = sameLineAmount(all, it); if (v != null) summary[labels[it.s]] = v; }
+    }
+    avail.sort((a, b) => a.date.localeCompare(b.date));
+    const card = all.find(i => /^\*\d{4}$/.test(i.s));
+    for (const r of rows) {
+      // Сумма в валюте пишется рядом с операцией: «Перевод (- 3,73 USD)»
+      const fx = r.op.match(/\(([+-]\s*[\d ,.]+)\s*([A-Z]{3})\)/);
+      if (fx) { r.orig = { cents: parseAmount(fx[1]).cents, cur: fx[2] }; r.op = r.op.replace(fx[0], ''); }
+      // «Перевод на свой / счет» занимает две строки, вторая иногда уезжает к соседней операции
+      r.op = clean(r.op.replace(/^счет\s*/, '').replace(/Перевод на свой( счет)?/, 'Перевод на свой счет'));
+    }
+    return {
+      bank: 'kaspi',
+      account: { key: 'kaspi-gold-KZT', name: 'Kaspi Gold', bank: 'kaspi', cur: 'KZT', mask: card ? card.s : '' },
+      period: period ? { from: toISO(period[1]), to: toISO(period[2]) } : null,
+      opening: avail.length ? avail[0] : null,
+      balances: avail.length ? [{ key: 'kaspi-gold-KZT', name: 'Kaspi Gold', bank: 'kaspi', cur: 'KZT', date: avail[avail.length - 1].date, cents: avail[avail.length - 1].cents }] : [],
+      summary,
+      rows,
+    };
+  }
+
+  function parseFreedom(items) {
+    const rows = tableRows(items, { dateMaxX: 110, detailsX: 375, maxDy: 30, headerless: false });
+    const all = items.map(i => ({ ...i, s: clean(i.s) }));
+    const period = all.map(i => i.s.match(/за период с (\S+) по (\S+)/)).find(Boolean);
+    const dateItem = all.find(i => i.s === 'Дата:');
+    const asOf = dateItem ? all.find(i => Math.abs(i.y - dateItem.y) < 4 && DATE_RE.test(i.s)) : null;
+    const to = asOf ? toISO(asOf.s) : (period ? toISO(period[2]) : null);
+    const cardItem = all.find(i => /^\*\*\d{4}$/.test(i.s));
+    const balances = [];
+    for (const it of all.filter(i => i.page === 1 && /^KZ\w+(KZT|USD|EUR|RUB|CNY|TRY|AED)$/.test(i.s))) {
+      const cur = it.s.slice(-3);
+      const bal = all.find(i => i.page === 1 && Math.abs(i.y - it.y) < 4 && i.x > it.x + 150 && /\d/.test(i.s));
+      if (!bal) continue;
+      const num = bal.s.replace(/[^\d.,]/g, '');
+      const v = parseAmount('+' + num);
+      if (v) balances.push({ key: 'freedom-' + cur, name: 'Freedom ' + cur, bank: 'freedom', cur, date: to, cents: v.cents });
+    }
+    const summary = {};
+    const labels = ['Платеж', 'Перевод', 'Покупка', 'Снятие', 'Платеж по кредиту', 'Пополнение', 'Сумма в обработке', 'Погашение', 'Овердрафт', 'Другое'];
+    for (const it of all.filter(i => i.page === 1)) {
+      if (labels.includes(it.s) && summary[it.s] == null) {
+        const amt = all.find(i => i.page === 1 && Math.abs(i.y - it.y) < 4 && i.x > it.x + 100);
+        const v = amt && parseAmount(amt.s.replace(/^(\d)/, '+$1'));
+        if (v) summary[it.s] = v.cents;
+      }
+    }
+    for (const r of rows) {
+      if (/обработке/.test(r.op)) { r.pending = true; r.op = 'Сумма в обработке'; }
+    }
+    return {
+      bank: 'freedom',
+      account: { key: 'freedom-KZT', name: 'Freedom', bank: 'freedom', cur: 'KZT', mask: cardItem ? cardItem.s : '' },
+      period: period ? { from: toISO(period[1]), to: toISO(period[2]) } : null,
+      opening: null,
+      balances,
+      summary,
+      rows,
+    };
+  }
+
+  function parse(items) {
+    const bank = detectBank(items);
+    if (bank === 'kaspi') return parseKaspi(items);
+    if (bank === 'freedom') return parseFreedom(items);
+    return null;
+  }
+
+  return { parse, parseAmount, detectBank };
+})();
+if (typeof module !== 'undefined') module.exports = StatementParser;
+
+</script>
+<script>
+// Правила учёта: категории, свои переводы, курсы, дубли.
+// kind: 'expense' — трата (плюс по ней = возврат), 'income' — доход, 'internal' — движение между своими деньгами.
+const Ledger = (() => {
+  const CATEGORIES = {
+    expense: ['Продукты', 'Кафе и доставка', 'Транспорт', 'Жильё и аренда', 'Подписки и связь', 'Развлечения и игры',
+      'Покупки', 'Здоровье', 'Путешествия', 'Переводы людям', 'Кредиты и рассрочка', 'Налоги и госуслуги', 'Комиссии банка', 'Наличные', 'Прочее'],
+    income: ['Переводы и поступления', 'Зарплата', 'Кэшбэк и бонусы', 'Проценты по депозиту', 'Прочий доход'],
+    internal: ['Свои счета', 'Депозит', 'Обмен валюты', 'Кредит получен'],
+  };
+
+  const MERCHANTS = [
+    ['Комиссии банка', /Комиссия за|годовое обслуживание|обслуживание карты/i],
+    ['Транспорт', /Avtobys|YANDEX\.?GO|ТАКСИ|TAXI|таксопарк|Аламан|ONAY|BOLT|INDRIVE|АЗС|HELIOS|SINOOIL|QAZAQ ?OIL|PARKING|ПАРКОВ|ПРОЕЗД|КомфортАвто|Драйв|DRIVE/i],
+    ['Кафе и доставка', /YANDEX\.?EDA|WOLT|GLOVO|CHOCO|COFFEE|КОФЕ|CAFE|КАФЕ|\bBAR\b|RESTAURANT|РЕСТОРАН|BURGER|KFC|DODO|PIZZA|ДОСТАВК|SHAURMA|ШАУРМ|DONER|BULKA|PEKARN|ПЕКАРН|CANTEEN|СТОЛОВ|Шашлык|MARINAD/i],
+    ['Продукты', /MAGNUM|SMALL|RAHMET|BEREKE|ANVAR|SUPERMARK|GALMART|MAGAZIN|МАГАЗИН|MARKET|МАРКЕТ|SMALL|ASTYKZHAN|DOSTYK|ПРОДУКТ|Аппарат самообслуживания/i],
+    ['Развлечения и игры', /KINO|Steam|PLAYSTATION|NINTENDO|CINEMA|КИНО|BOWLING|\bGAME|ИГР/i],
+    ['Жильё и аренда', /APART|\bRENT\b|АРЕНД|HOTEL|ОТЕЛЬ|HOSTEL|BOOKING|AIRBNB|КОММУНАЛ|ЖКХ/i],
+    ['Подписки и связь', /ANTHROPIC|OPENAI|SPOTIFY|APPLE\.COM|ITUNES|GOOGLE|NETFLIX|YOUTUBE|ICLOUD|TELEGRAM|KCELL|BEELINE|TELE2|ACTIV|ALTEL|KAZAKHTELECOM|ПОДПИСК/i],
+    ['Путешествия', /Aviata|Kaspi Travel|AIR ASTANA|FLYARYSTAN|\bSCAT\b|AVIA|KTZ|TICKET|e-flow/i],
+    ['Здоровье', /АПТЕК|APTEKA|PHARM|CLINIC|КЛИНИК|HOSPITAL|БОЛЬНИЦ|ЛАБОРАТОР|INVITRO|OLYMP/i],
+    ['Покупки', /WILDBERRIES|OZON|TEMU|ALIEXPRESS|SULPAK|TECHNODOM|MECHTA|ZARA|LC ?WAIKIKI|Kaspi Магазин|DEFACTO|H&M/i],
+  ];
+
+  // Ключ места: название без города, страны и номеров — чтобы запомнить категорию для похожих операций.
+  function placeKey(tx) {
+    return (tx.det || tx.op || '').toUpperCase()
+      .replace(/\b(KZ|US|CZ|RU|TR|AE|ALMATY|ASTANA|NUR-SULTAN|NUR SULTAN|G\.ASTANA|ASTANA Q\.|SAN FRANCISCO|FRANCISCO)\b/g, ' ')
+      .replace(/№?\s*[A-Z0-9-]*\d[A-Z0-9-]*/g, ' ').replace(/[^A-ZА-ЯЁӘҒҚҢӨҰҮҺІ ]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+  }
+
+  function classify(tx, rules) {
+    const d = tx.det || '', op = tx.op || '', both = op + ' ' + d;
+    const neg = tx.cents < 0;
+    if (/вклад/i.test(d)) return { kind: 'internal', cat: 'Депозит' };
+    if (/Между своими счетами/i.test(d)) return { kind: 'internal', cat: 'Обмен валюты' };
+    if (op === 'Перевод на свой счет') {
+      if (/Kaspi Red|Kaspi Кредит|Рассрочк|кредит/i.test(d)) return { kind: 'expense', cat: 'Кредиты и рассрочка' };
+      if (/депозит/i.test(d)) return { kind: 'internal', cat: 'Депозит' };
+      return { kind: 'internal', cat: 'Свои счета' };
+    }
+    if (op === 'Поступление со своих счетов') return { kind: 'internal', cat: 'Свои счета' };
+    if (op === 'Зачисление кредита') return { kind: 'internal', cat: 'Кредит получен' };
+    if (/Перевод валюты Freedom|кешбэк|кэшбэк|cashback|бонус/i.test(both)) return { kind: 'income', cat: 'Кэшбэк и бонусы' };
+    if (/Вознаграждение по вкладу|Капитализация|начисленн\S* процент/i.test(both)) return { kind: 'income', cat: 'Проценты по депозиту' };
+    if (/зарплат|заработн/i.test(both)) return { kind: 'income', cat: 'Зарплата' };
+    if (op === 'Снятие') return { kind: 'expense', cat: 'Наличные' };
+    if (/налог|госпошлин|штраф|egov/i.test(both)) return { kind: 'expense', cat: 'Налоги и госуслуги' };
+    const remembered = rules && rules[placeKey(tx)];
+    if (op === 'Перевод' || op === 'Пополнение') {
+      if (remembered && !neg === (remembered.kind === 'income')) return remembered;
+      return neg ? { kind: 'expense', cat: 'Переводы людям' } : { kind: 'income', cat: 'Переводы и поступления' };
+    }
+    if (remembered) return remembered;
+    for (const [cat, re] of MERCHANTS) if (re.test(d)) return { kind: 'expense', cat };
+    return { kind: 'expense', cat: 'Прочее' };
+  }
+
+  function hash(s) {
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(36);
+  }
+
+  // Превращает разобранную выписку в операции. Одинаковые строки в одной выписке нумеруются,
+  // поэтому повторная загрузка той же выписки или пересекающегося периода не создаёт дублей.
+  function fromStatement(st, rules, importId) {
+    const seen = {};
+    return st.rows.map(r => {
+      const acc = st.bank === 'kaspi' ? 'kaspi-gold-KZT' : 'freedom-' + r.cur;
+      const base = [st.bank, r.date, r.cents, r.cur, hash(r.op + '|' + r.details)].join('_');
+      seen[base] = (seen[base] || 0) + 1;
+      const tx = { id: base + '_' + seen[base], acc, bank: st.bank, date: r.date, cents: r.cents, cur: r.cur,
+        op: r.op, det: r.details, imp: importId };
+      if (r.pending) tx.pending = true;
+      if (r.orig) tx.orig = r.orig;
+      Object.assign(tx, classify(tx, rules));
+      return tx;
+    });
+  }
+
+  const dayDiff = (a, b) => Math.abs((Date.parse(a) - Date.parse(b)) / 864e5);
+
+  // Перевод между своими картами в разных банках: минус в одном, такой же плюс в другом, в пределах дня.
+  function linkTransfers(all) {
+    const hint = /другого банка|карты на карту|Kaspi|Freedom|Фридом/i;
+    const open = all.filter(t => !t.manual && !t.link && t.cur === 'KZT' && (t.op === 'Перевод' || t.op === 'Пополнение'));
+    const links = [];
+    for (const a of open) {
+      if (a.link || a.cents >= 0) continue;
+      const b = open.find(t => !t.link && t.bank !== a.bank && t.cents === -a.cents && dayDiff(t.date, a.date) <= 1 &&
+        (hint.test(a.det) || hint.test(t.det)));
+      if (b) {
+        a.link = b.id; b.link = a.id;
+        a.kind = b.kind = 'internal'; a.cat = b.cat = 'Свои счета';
+        links.push([a, b]);
+      }
+    }
+    return links;
+  }
+
+  // Курс по обмену внутри Freedom: минус в валюте и плюс в тенге в один день с пометкой «Между своими счетами».
+  function ratesFromConversions(txs) {
+    const out = [];
+    const conv = txs.filter(t => /Между своими счетами/i.test(t.det));
+    for (const f of conv.filter(t => t.cur !== 'KZT')) {
+      const k = conv.find(t => t.cur === 'KZT' && t.date === f.date && Math.sign(t.cents) === -Math.sign(f.cents));
+      if (k) out.push({ cur: f.cur, date: f.date, rate: Math.round(Math.abs(k.cents / f.cents) * 100) / 100, auto: true });
+    }
+    return out;
+  }
+
+  // Курс на дату: последний известный не позже даты операции, иначе ближайший после неё.
+  function rateFor(rates, cur, date) {
+    if (cur === 'KZT') return 1;
+    const list = rates.filter(r => r.cur === cur).sort((a, b) => a.date.localeCompare(b.date));
+    if (!list.length) return null;
+    let best = null;
+    for (const r of list) if (r.date <= date) best = r;
+    return (best || list[0]).rate;
+  }
+
+  function toKZT(rates, cents, cur, date) {
+    const r = rateFor(rates, cur, date);
+    return r == null ? null : Math.round(cents * r);
+  }
+
+  // Сверка с итогами банка. Kaspi: начальный остаток + все операции = конечный остаток.
+  function reconcile(st) {
+    const res = { checks: [] };
+    if (st.opening && st.balances[0]) {
+      const sum = st.rows.reduce((a, r) => a + r.cents, 0);
+      res.checks.push({ label: 'Остаток в начале + операции = остаток в конце', ok: st.opening.cents + sum === st.balances[0].cents,
+        expected: st.balances[0].cents, got: st.opening.cents + sum, cur: 'KZT' });
+    }
+    const by = {}, foreign = {};
+    for (const r of st.rows) {
+      by[r.op] = (by[r.op] || 0) + (r.cur === 'KZT' ? r.cents : 0);
+      if (r.cur !== 'KZT') foreign[r.op] = true;
+    }
+    for (const [op, v] of Object.entries(st.summary || {})) {
+      if (!v && !by[op]) continue;
+      const got = by[op] || 0;
+      const expected = op === 'Сумма в обработке' ? -Math.abs(v) : v;
+      res.checks.push({ label: op, ok: got === expected, approx: !!foreign[op], expected, got, cur: 'KZT' });
+    }
+    res.ok = res.checks.every(c => c.ok || c.approx);
+    return res;
+  }
+
+  // Регулярные платежи: одно место, трата в трёх и более разных месяцах.
+  function recurring(txs) {
+    const g = {};
+    for (const t of txs) {
+      if (t.kind !== 'expense' || t.cents >= 0 || t.cat === 'Переводы людям' || t.cat === 'Продукты') continue;
+      const k = placeKey(t);
+      if (!k) continue;
+      (g[k] = g[k] || { key: k, name: t.det || t.op, cur: t.cur, months: new Set(), last: t, total: 0, n: 0 });
+      g[k].months.add(t.date.slice(0, 7)); g[k].n++; g[k].total += t.cents;
+      if (t.date > g[k].last.date) g[k].last = t;
+    }
+    return Object.values(g).filter(x => x.months.size >= 3 && x.n <= x.months.size * 2)
+      .map(x => ({ name: x.name, cur: x.cur, avg: Math.round(x.total / x.n), last: x.last.date, months: x.months.size, cat: x.last.cat }))
+      .sort((a, b) => a.avg - b.avg);
+  }
+
+  return { CATEGORIES, classify, placeKey, fromStatement, linkTransfers, ratesFromConversions, rateFor, toKZT, reconcile, recurring };
+})();
+if (typeof module !== 'undefined') module.exports = Ledger;
+
+</script>
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const MON_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+const SIGN = { KZT: '₸', USD: '$', EUR: '€', RUB: '₽', CNY: '¥', TRY: '₺', AED: 'AED' };
+const BANKS = { kaspi: 'Kaspi', freedom: 'Freedom', cash: 'Наличные', other: 'Другой банк' };
+const KIND = { expense: 'Трата', income: 'Доход', internal: 'Свои деньги' };
+
+function fmt(cents, cur = 'KZT', opts = {}) {
+  const v = cents / 100;
+  const whole = opts.whole ?? (Math.abs(v) >= 1000 || Number.isInteger(v));
+  const s = Math.abs(v).toLocaleString('ru-RU', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
+  const sign = opts.sign ? (cents > 0 ? '+' : cents < 0 ? '−' : '') : (cents < 0 ? '−' : '');
+  return `${sign}${s} ${SIGN[cur] || cur}`;
+}
+const today = () => new Date().toISOString().slice(0, 10);
+const dayLabel = iso => { const [y, m, d] = iso.split('-').map(Number); return `${d} ${MON_SHORT[m - 1]}${y !== new Date().getFullYear() ? ' ' + y : ''}`; };
+const monthOf = iso => iso.slice(0, 7);
+const monthName = ym => { const [y, m] = ym.split('-').map(Number); return `${MONTHS[m - 1]} ${y}`; };
+const shiftMonth = (ym, n) => { let [y, m] = ym.split('-').map(Number); m += n; while (m < 1) { m += 12; y--; } while (m > 12) { m -= 12; y++; } return `${y}-${String(m).padStart(2, '0')}`; };
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, 3200);
+}
+
+/* ---------- Состояние и хранение ---------- */
+const S = {
+  meta: { accounts: {}, deposits: [], rates: [], rules: {}, imports: [], cash: { cents: 0, date: today() } },
+  months: {},          // 'tx-2026-10' -> { id: tx }
+  view: 'overview', month: monthOf(today()), filter: 'all', cat: null, q: '', shown: 80,
+  mode: 'loading', pendingImport: null,
+};
+const store = { db: null, col: null, dirty: new Set(), busy: new Set(), timer: null, flushing: false };
+const LS_KEY = 'svodny-koshelek-v1';
+
+function allTx() {
+  const out = [];
+  for (const m of Object.values(S.months)) for (const t of Object.values(m)) out.push(t);
+  return out.sort((a, b) => b.date.localeCompare(a.date) || (a.id < b.id ? 1 : -1));
+}
+function putTx(tx) {
+  const id = 'tx-' + monthOf(tx.date);
+  (S.months[id] = S.months[id] || {})[tx.id] = tx;
+  markDirty(id);
+}
+function dropTx(tx) {
+  const id = 'tx-' + monthOf(tx.date);
+  if (S.months[id]) { delete S.months[id][tx.id]; markDirty(id); }
+}
+function findTx(id) {
+  for (const m of Object.values(S.months)) if (m[id]) return m[id];
+  return null;
+}
+function saveMeta() { markDirty('meta'); }
+
+function markDirty(id) {
+  store.dirty.add(id);
+  clearTimeout(store.timer);
+  store.timer = setTimeout(flush, 350);
+}
+async function flush() {
+  if (store.flushing) return;
+  store.flushing = true;
+  try {
+    while (store.dirty.size) {
+      const ids = [...store.dirty]; store.dirty.clear();
+      if (S.mode === 'local') { saveLocal(); continue; }
+      for (const id of ids) {
+        store.busy.add(id);
+        try {
+          const ref = store.col.doc(id);
+          if (id === 'meta') await ref.set(JSON.parse(JSON.stringify(S.meta)));
+          else if (!S.months[id] || !Object.keys(S.months[id]).length) { await ref.delete(); delete S.months[id]; }
+          else await ref.set({ items: S.months[id] });
+        } catch (e) {
+          if (e && e.code === 'unavailable') { store.dirty.add(id); await new Promise(r => setTimeout(r, 800 + Math.random() * 800)); }
+          else toast(e && e.code === 'quota_exceeded' ? 'Хранилище заполнено. Удалите старые загрузки на вкладке «Загрузить».' : 'Не удалось сохранить. Проверьте интернет и повторите.');
+        } finally { store.busy.delete(id); }
+      }
+    }
+  } finally { store.flushing = false; }
+}
+function saveLocal() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ meta: S.meta, months: S.months })); }
+  catch { toast('Браузер не дал сохранить данные. Сделайте резервную копию на вкладке «Счета».'); }
+}
+function loadLocal() {
+  try { const raw = localStorage.getItem(LS_KEY); if (raw) { const d = JSON.parse(raw); S.meta = { ...S.meta, ...d.meta }; S.months = d.months || {}; } } catch {}
+}
+
+// Данные живут только в памяти этого устройства. Прежняя версия хранила их в аккаунте:
+// если там что-то осталось, переносим на устройство и стираем из аккаунта.
+async function initStore() {
+  S.mode = 'local'; loadLocal(); jumpToLatestMonth(); render();
+  let db = null, user = null, id = null;
+  try { [db, user] = await Promise.all([window.claude?.use?.('db'), window.claude?.use?.('user')]); } catch {}
+  try { id = user ? await user.id() : null; } catch {}
+  if (!db || !id) return;
+  try {
+    const col = db.collection('data/users/' + id);
+    const snap = await col.get();
+    if (snap.empty) return;
+    let moved = 0;
+    const localEmpty = !allTx().length;
+    for (const d of snap.docs) {
+      const body = JSON.parse(JSON.stringify(d.data() || {}));
+      if (d.id === 'meta') S.meta = localEmpty ? { ...S.meta, ...body } : { ...S.meta, rules: { ...(body.rules || {}), ...S.meta.rules },
+        imports: [...S.meta.imports, ...(body.imports || []).filter(b => !S.meta.imports.some(i => i.id === b.id))] };
+      else if (d.id.startsWith('tx-')) {
+        const m = S.months[d.id] = S.months[d.id] || {};
+        for (const [k, t] of Object.entries(body.items || {})) if (!m[k]) { m[k] = t; moved++; }
+      }
+    }
+    saveLocal();
+    for (const d of snap.docs) await col.doc(d.id).delete();
+    jumpToLatestMonth(); render();
+    toast(`Данные перенесены на это устройство и удалены из аккаунта (${moved} операций)`);
+  } catch { /* аккаунт недоступен — работаем с памятью устройства */ }
+}
+function jumpToLatestMonth() {
+  const t = allTx();
+  if (t.length && !t.some(x => monthOf(x.date) === S.month)) S.month = monthOf(t[0].date);
+}
+
+/* ---------- Расчёты ---------- */
+const rates = () => S.meta.rates || [];
+const kzt = t => Ledger.toKZT(rates(), t.cents, t.cur, t.date);
+
+function monthStats(ym) {
+  const txs = allTx().filter(t => monthOf(t.date) === ym);
+  let spent = 0, income = 0, noRate = 0, pending = 0;
+  const cats = {};
+  for (const t of txs) {
+    const v = kzt(t);
+    if (v == null) { if (t.kind !== 'internal') noRate++; continue; }
+    if (t.kind === 'expense') { spent -= v; cats[t.cat] = (cats[t.cat] || 0) - v; if (t.pending) pending++; }
+    else if (t.kind === 'income') income += v;
+  }
+  return { txs, spent, income, noRate, pending, cats };
+}
+
+function accountBalances() {
+  const out = [];
+  const txs = allTx();
+  for (const [key, a] of Object.entries(S.meta.accounts || {})) {
+    const extra = txs.filter(t => t.manual && t.acc === key && t.date > a.date).reduce((s, t) => s + t.cents, 0);
+    out.push({ key, ...a, now: a.cents + extra });
+  }
+  const c = S.meta.cash || { cents: 0, date: today() };
+  const cashExtra = txs.filter(t => t.manual && t.acc === 'cash' && t.date > c.date).reduce((s, t) => s + t.cents, 0);
+  out.push({ key: 'cash', name: 'Наличные', bank: 'cash', cur: 'KZT', cents: c.cents, date: c.date, now: c.cents + cashExtra });
+  return out;
+}
+function depositFlows(dep) {
+  if (!dep.auto) return [];
+  return allTx().filter(t => t.cat === 'Депозит' && t.bank === dep.bank && t.date > dep.date && t.acc !== 'deposit');
+}
+function depositNow(dep) {
+  return dep.cents + depositFlows(dep).reduce((s, t) => s - t.cents, 0);
+}
+function capital() {
+  let total = 0, missing = 0;
+  for (const a of accountBalances()) { const v = Ledger.toKZT(rates(), a.now, a.cur, today()); if (v == null) { if (a.now) missing++; } else total += v; }
+  for (const d of S.meta.deposits || []) { const v = Ledger.toKZT(rates(), depositNow(d), d.cur, today()); if (v == null) missing++; else total += v; }
+  return { total, missing };
+}
+
+/* ---------- Отрисовка ---------- */
+function render() {
+  $('#mLabel').textContent = monthName(S.month);
+  $('#mNext').disabled = S.month >= monthOf(today());
+  $('#monthNav').style.visibility = (S.view === 'overview' || S.view === 'ops') ? 'visible' : 'hidden';
+  document.querySelectorAll('nav.tabs button').forEach(b => b.setAttribute('aria-current', b.dataset.v === S.view ? 'page' : 'false'));
+  for (const v of ['overview', 'ops', 'import', 'accounts']) $('#v-' + v).hidden = v !== S.view;
+  const banner = $('#modeBanner');
+  const lb = S.meta.lastBackup;
+  const stale = allTx().length && (!lb || (Date.now() - Date.parse(lb)) / 864e5 > 30);
+  banner.hidden = !stale;
+  if (stale) banner.innerHTML = (lb ? 'Последняя резервная копия — ' + dayLabel(lb) + '.' : 'Резервной копии ещё нет.') +
+    ' Данные хранятся только на этом устройстве. <button class="pill" data-go="accounts" style="border:0;cursor:pointer">Сделать копию</button>';
+  if (S.view === 'overview') renderOverview();
+  if (S.view === 'ops') renderOps();
+  if (S.view === 'import') renderImport();
+  if (S.view === 'accounts') renderAccounts();
+}
+
+function renderOverview() {
+  const el = $('#v-overview');
+  const txs = allTx();
+  if (S.mode === 'loading') { el.innerHTML = '<div class="card empty"><div class="muted">Загружаю ваши данные…</div></div>'; return; }
+  if (!txs.length) {
+    el.innerHTML = `<div class="card empty">
+      <div class="mid">Здесь появятся ваши траты и доходы</div>
+      <div class="note">Загрузите выписку Kaspi Gold или Freedom, и приложение само разложит операции по категориям, найдёт переводы между вашими картами и сверит итог с банком.</div>
+      <button class="btn primary" data-go="import">Загрузить первую выписку</button>
+      <button class="btn" data-act="add">Или добавить трату вручную</button></div>`;
+    return;
+  }
+  const st = monthStats(S.month), prev = monthStats(shiftMonth(S.month, -1));
+  const cap = capital();
+  const diff = prev.spent ? Math.round((st.spent - prev.spent) / prev.spent * 100) : null;
+  const cats = Object.entries(st.cats).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const maxCat = cats.length ? cats[0][1] : 1;
+
+  const months = Array.from({ length: 6 }, (_, i) => shiftMonth(S.month, i - 5));
+  const vals = months.map(m => monthStats(m).spent);
+  const maxV = Math.max(...vals, 1);
+  const W = 340, H = 150, padB = 22, padT = 18, bw = 36, gap = (W - bw * 6) / 6;
+  const bars = months.map((m, i) => {
+    const h = Math.max(vals[i] > 0 ? 3 : 0, Math.round((vals[i] / maxV) * (H - padB - padT)));
+    const x = gap / 2 + i * (bw + gap), y = H - padB - h, cur = m === S.month;
+    return `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="5" fill="${cur ? 'var(--accent)' : 'var(--line)'}"></rect>
+      <text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" class="${cur ? 'lbl' : ''}">${MON_SHORT[Number(m.slice(5)) - 1]}</text>
+      ${cur && vals[i] ? `<text x="${x + bw / 2}" y="${y - 5}" text-anchor="middle" class="lbl">${short(vals[i])}</text>` : ''}`;
+  }).join('');
+
+  const rec = Ledger.recurring(txs).slice(0, 6);
+  el.innerHTML = `
+    <div class="hero">
+      <div class="muted small">Потрачено за ${esc(monthName(S.month).toLowerCase())}</div>
+      <div class="big num">${fmt(st.spent * 1, 'KZT', { whole: true })}</div>
+      <div class="chips">
+        ${diff == null ? '' : `<span class="pill ${diff > 0 ? 'gold' : ''}">${diff > 0 ? '+' : ''}${diff}% к ${esc(MONTHS[Number(shiftMonth(S.month, -1).slice(5)) - 1].toLowerCase().replace(/ь$/, 'ю').replace(/й$/, 'ю').replace(/т$/, 'ту'))}</span>`}
+        ${st.noRate ? `<button class="pill bad" data-go="accounts" style="border:0;cursor:pointer">${st.noRate} без курса — не в итоге</button>` : ''}
+        ${st.pending ? `<span class="pill plain">${st.pending} в обработке у банка</span>` : ''}
+      </div>
+    </div>
+    <div class="split">
+      <div><span class="muted small">Доходы</span><span class="mid num">${fmt(st.income, 'KZT', { whole: true })}</span></div>
+      <div><span class="muted small">Всего денег</span><span class="mid num">${fmt(cap.total, 'KZT', { whole: true })}</span>${cap.missing ? '<span class="small" style="color:var(--bad)">часть без курса</span>' : ''}</div>
+    </div>
+    <div class="card">
+      <h2>Куда ушли деньги</h2>
+      ${cats.length ? `<div class="cats">${cats.map(([c, v]) => `
+        <button class="cat" data-cat="${esc(c)}">
+          <div class="row"><span>${esc(c)}</span><span class="num">${fmt(v, 'KZT', { whole: true })}</span></div>
+          <div class="bar"><i style="width:${Math.max(2, v / maxCat * 100).toFixed(1)}%"></i></div>
+        </button>`).join('')}</div>` : '<div class="note">В этом месяце трат нет.</div>'}
+    </div>
+    <div class="card chart">
+      <h2>Траты по месяцам</h2>
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Траты за последние 6 месяцев">
+        <line x1="0" x2="${W}" y1="${H - padB}" y2="${H - padB}" stroke="var(--line)"></line>${bars}</svg>
+    </div>
+    ${rec.length ? `<div class="card"><h2>Регулярные платежи</h2>
+      <div class="cats">${rec.map(r => `<div class="row"><div style="min-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</div>
+      <div class="note">${esc(r.cat)} · ${r.months} мес. подряд · последний ${dayLabel(r.last)}</div></div><span class="num">${fmt(-r.avg, r.cur, { whole: true })}</span></div>`).join('')}</div>
+      <div class="note">В среднем за раз. Найдены по местам, где вы платите каждый месяц.</div></div>` : ''}`;
+}
+function short(cents) {
+  const v = cents / 100;
+  if (v >= 1e6) return (v / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' млн';
+  if (v >= 1e3) return Math.round(v / 1e3) + ' тыс';
+  return Math.round(v) + '';
+}
+
+function txTitle(t) { return t.note || t.det || t.op || 'Операция'; }
+function txRow(t, last) {
+  const cls = t.kind === 'income' ? 'in' : t.kind === 'internal' ? 'int' : '';
+  const v = t.cur !== 'KZT' ? kzt(t) : null;
+  const tags = [
+    `<span>${esc(t.cat)}</span>`, `<span>· ${esc(BANKS[t.bank] || t.bank)}</span>`,
+    t.pending ? '<span class="pill plain">в обработке</span>' : '',
+    t.link ? '<span class="pill">перевод себе</span>' : '',
+    t.cur !== 'KZT' ? (v == null ? '<span class="pill bad">нет курса</span>' : `<span class="num">≈ ${fmt(v, 'KZT')}</span>`) : '',
+    t.manual ? '<span class="pill plain">вручную</span>' : '',
+  ].join(' ');
+  const amt = t.kind === 'expense' ? fmt(t.cents, t.cur, { sign: t.cents > 0 }) : fmt(t.cents, t.cur, { sign: true });
+  return `<button class="tx${last ? ' last' : ''}" data-tx="${esc(t.id)}"><span class="t">${esc(txTitle(t))}</span><span class="a num ${cls}">${amt}</span><span class="s">${tags}</span></button>`;
+}
+
+function renderOps() {
+  document.querySelectorAll('#opsFilter button').forEach(b => b.setAttribute('aria-pressed', b.dataset.f === S.filter ? 'true' : 'false'));
+  $('#opsCat').innerHTML = S.cat ? `<span class="pill">${esc(S.cat)} <button aria-label="Сбросить категорию" data-act="clearcat" style="border:0;background:none;color:inherit;cursor:pointer;padding:0 0 0 4px">×</button></span>` : '';
+  const q = S.q.trim().toLowerCase();
+  let txs = allTx().filter(t => monthOf(t.date) === S.month);
+  if (S.filter !== 'all') txs = txs.filter(t => t.kind === S.filter);
+  if (S.cat) txs = txs.filter(t => t.cat === S.cat);
+  if (q) txs = txs.filter(t => (txTitle(t) + ' ' + t.op + ' ' + t.det + ' ' + t.cat + ' ' + (t.cents / 100)).toLowerCase().includes(q.replace(',', '.')));
+  const el = $('#opsList');
+  if (!txs.length) { el.innerHTML = `<div class="card empty"><div class="muted">${allTx().length ? 'В этом месяце таких операций нет.' : 'Операций пока нет. Загрузите выписку или добавьте трату кнопкой «+».'}</div></div>`; return; }
+  const shown = txs.slice(0, S.shown);
+  let html = '', day = null;
+  shown.forEach((t, i) => {
+    if (t.date !== day) {
+      day = t.date;
+      const sum = txs.filter(x => x.date === day && x.kind === 'expense').reduce((s, x) => s - (kzt(x) || 0), 0);
+      html += `<div class="day"><span>${dayLabel(day)}</span><span class="num">${sum ? fmt(sum, 'KZT', { whole: true }) : ''}</span></div>`;
+    }
+    const next = shown[i + 1];
+    html += txRow(t, !next || next.date !== t.date);
+  });
+  if (txs.length > S.shown) html += `<button class="btn wide" style="margin-top:12px" data-act="more">Показать ещё ${Math.min(80, txs.length - S.shown)}</button>`;
+  el.innerHTML = html;
+}
+
+function renderImport() {
+  const p = S.pendingImport;
+  $('#preview').innerHTML = p ? previewHTML(p) : '';
+  const imps = [...(S.meta.imports || [])].sort((a, b) => b.at.localeCompare(a.at));
+  $('#history').innerHTML = imps.length ? `<div class="card"><h2>Загруженные выписки</h2>
+    ${imps.map(i => `<div class="row"><div><div>${esc(BANKS[i.bank])} · ${dayLabel(i.from)} — ${dayLabel(i.to)}</div>
+      <div class="note">${i.added} операций · загружено ${dayLabel(i.at.slice(0, 10))}</div></div>
+      <button class="btn danger" data-undo="${esc(i.id)}" style="padding:8px 12px">Откатить</button></div>`).join('')}
+    <div class="note">«Откатить» удаляет все операции этой загрузки. Ваши ручные правки в них тоже пропадут.</div></div>` : '';
+}
+
+function previewHTML(p) {
+  if (p.error) return `<div class="card"><div class="row"><b>${esc(p.file)}</b><span class="pill bad">не получилось</span></div><div class="note">${esc(p.error)}</div>
+    <button class="btn" data-act="cancelimp">Понятно</button></div>`;
+  const items = p.items.map(it => {
+    const rc = it.rec;
+    return `<div class="card">
+      <div class="row"><b>${esc(BANKS[it.st.bank])} · ${it.st.rows.length} строк</b><span class="pill ${rc.ok ? '' : 'bad'}">${rc.ok ? 'сходится' : 'есть расхождение'}</span></div>
+      <div class="note">${esc(it.file)} · ${it.st.period ? dayLabel(it.st.period.from) + ' — ' + dayLabel(it.st.period.to) : ''}</div>
+      <div class="checks">${rc.checks.map(c => `<div><span class="${c.ok ? 'ok' : c.approx ? 'warn' : 'err'}">${c.ok ? '✓' : c.approx ? '≈' : '✗'}</span>
+        <span>${esc(c.label)}</span><span class="num">${fmt(c.got, c.cur)}</span></div>`).join('')}</div>
+      ${rc.checks.some(c => c.approx) ? '<div class="note">≈ — в этом типе есть операции в валюте. Банк пересчитывает их в тенге по своему курсу, поэтому сверяется только тенговая часть.</div>' : ''}
+      ${rc.checks.some(c => !c.ok && !c.approx) ? '<div class="note" style="color:var(--bad)">Часть строк могла не прочитаться. Загрузить всё равно можно, а потом проверить операции вручную.</div>' : ''}
+      <div class="note">Новых: <b>${it.fresh.length}</b> · уже были: ${it.dup} · переводов между своими картами: ${it.links}</div>
+    </div>`;
+  }).join('');
+  const total = p.items.reduce((s, it) => s + it.fresh.length, 0);
+  return items + `<div class="btns"><button class="btn primary" data-act="commit" ${total ? '' : 'disabled'}>${total ? `Загрузить ${total}` : 'Нечего добавлять'}</button>
+    <button class="btn" data-act="cancelimp">Отменить</button></div>`;
+}
+
+function renderAccounts() {
+  const el = $('#v-accounts');
+  const accs = accountBalances().filter(a => a.now || a.cur === 'KZT');
+  const cap = capital();
+  const deps = S.meta.deposits || [];
+  const rs = [...rates()].sort((a, b) => b.date.localeCompare(a.date));
+  const curs = [...new Set([...accs.filter(a => a.now).map(a => a.cur), ...deps.map(d => d.cur), ...allTx().map(t => t.cur)])].filter(c => c !== 'KZT');
+  el.innerHTML = `
+    <div class="hero"><div class="muted small">Всего денег сейчас</div><div class="big num">${fmt(cap.total, 'KZT', { whole: true })}</div>
+      ${cap.missing ? '<div class="small" style="color:var(--bad)">Часть счетов в валюте без курса не вошла в итог. Добавьте курс ниже.</div>' : ''}</div>
+    <div class="card"><h2>Счета и карты</h2>
+      ${accs.map(a => `<div class="row"><div><div>${esc(a.name)}</div><div class="note">${a.key === 'cash' ? 'вы указали ' : 'по выписке на '}${dayLabel(a.date)}</div></div>
+        <div style="text-align:right"><div class="num">${fmt(a.now, a.cur)}</div>${a.key === 'cash' ? '<button class="pill plain" data-act="cash" style="cursor:pointer">изменить</button>' : ''}</div></div>`).join('')}
+      <div class="note">Остаток карты обновляется при загрузке новой выписки. Траты, добавленные вручную после даты выписки, учитываются сразу.</div>
+    </div>
+    <div class="card"><h2>Депозиты</h2>
+      ${deps.length ? deps.map(d => {
+        const now = depositNow(d), fl = depositFlows(d);
+        const m = Math.round(now * (d.rate || 0) / 1200);
+        return `<button class="cat" data-dep="${esc(d.id)}" style="gap:4px">
+          <div class="row"><span>${esc(d.name)}</span><span class="num mid" style="font-size:17px">${fmt(now, d.cur)}</span></div>
+          <div class="note">${esc(BANKS[d.bank] || '')}${d.rate ? ` · ${String(d.rate).replace('.', ',')}% годовых · ≈ ${fmt(m, d.cur, { whole: true })} в месяц` : ''}</div>
+          <div class="note">${d.auto ? `Пополнения и снятия из выписок: ${fl.length} после ${dayLabel(d.date)}` : `Остаток на ${dayLabel(d.date)}, обновляется вручную`}</div>
+        </button>`;
+      }).join('<hr style="border:0;border-top:1px solid var(--line);margin:0">') : '<div class="note">Добавьте депозит, чтобы видеть его в общем итоге. Пополнения и снятия по вкладу в выписках Freedom приложение узнаёт само.</div>'}
+      <button class="btn" data-act="adddep">Добавить депозит</button>
+    </div>
+    <div class="card"><h2>Курсы валют к тенге</h2>
+      ${rs.length ? rs.slice(0, 12).map(r => `<div class="row"><span>1 ${esc(r.cur)} с ${dayLabel(r.date)}${r.auto ? ' <span class="pill plain">из обмена</span>' : ''}</span>
+        <span><span class="num">${String(r.rate).replace('.', ',')} ₸</span> <button class="pill plain" data-delrate="${esc(r.cur + '|' + r.date)}" aria-label="Удалить курс" style="cursor:pointer">×</button></span></div>`).join('') : '<div class="note">Курсов пока нет.</div>'}
+      ${curs.length ? `<div class="note">Валюты в ваших операциях: ${curs.map(esc).join(', ')}. Для операции берётся последний курс не позже её даты.</div>` : ''}
+      <div class="fgrid"><select id="rCur" aria-label="Валюта">${['USD', 'EUR', 'RUB', 'CNY', 'TRY', 'AED'].map(c => `<option>${c}</option>`).join('')}</select>
+        <input type="number" id="rVal" inputmode="decimal" step="0.01" placeholder="Курс, ₸" aria-label="Курс в тенге"></div>
+      <div class="fgrid"><input type="date" id="rDate" value="${today()}" aria-label="С какой даты"><button class="btn" data-act="addrate">Добавить курс</button></div>
+    </div>
+    <div class="card"><h2>Резервная копия</h2>
+      <div class="note">Файл со всеми операциями, счетами и правилами. Сохраните его в «Файлы» на iPhone раз в месяц.</div>
+      <div class="btns"><button class="btn" data-act="export">Сохранить копию</button><label class="btn" for="backupIn">Восстановить</label></div>
+      <input type="file" id="backupIn" accept="application/json,.json" hidden>
+      <div class="note">Данные хранятся только на этом устройстве и никуда не отправляются.${S.meta.lastBackup ? ' Последняя копия: ' + dayLabel(S.meta.lastBackup) + '.' : ''}</div>
+      <button class="btn danger" data-act="wipe">Удалить все данные</button>
+    </div>`;
+}
+
+/* ---------- Листы ---------- */
+const sheet = $('#sheet');
+function openSheet(html, onReady) {
+  $('#sheetIn').innerHTML = html;
+  if (!sheet.open) sheet.showModal();
+  onReady && onReady($('#sheetIn'));
+}
+sheet.addEventListener('click', e => { if (e.target === sheet) sheet.close(); });
+function catOptions(kind, sel) {
+  return Ledger.CATEGORIES[kind].map(c => `<option ${c === sel ? 'selected' : ''}>${esc(c)}</option>`).join('');
+}
+
+function openTx(t) {
+  const key = Ledger.placeKey(t);
+  const similar = key ? allTx().filter(x => x.id !== t.id && Ledger.placeKey(x) === key && !x.manual).length : 0;
+  const v = t.cur !== 'KZT' ? kzt(t) : null;
+  openSheet(`
+    <h3>${esc(txTitle(t))}</h3>
+    <div class="row"><span class="mid num">${fmt(t.cents, t.cur, { sign: true })}</span><span class="muted">${dayLabel(t.date)} · ${esc(BANKS[t.bank] || t.bank)}</span></div>
+    ${t.cur !== 'KZT' ? `<div class="note">${v == null ? 'Курса для этой валюты нет — операция не попадает в итоги. Добавьте курс на вкладке «Счета».' : '≈ ' + fmt(v, 'KZT') + ' по курсу на ' + dayLabel(t.date)}</div>` : ''}
+    ${t.manual ? `<div class="fgrid">
+      <label class="f"><span>Сумма, ${SIGN[t.cur] || t.cur}</span><input type="number" id="eAmt" inputmode="decimal" step="0.01" value="${Math.abs(t.cents) / 100}"></label>
+      <label class="f"><span>Дата</span><input type="date" id="eDate" value="${t.date}"></label></div>`
+      : `<div class="orig">${esc([t.op, t.det].filter(Boolean).join(' · '))}${t.link ? '<br>Связана с такой же суммой в другом банке: это перевод между вашими картами.' : ''}</div>`}
+    <div class="fgrid">
+      <label class="f"><span>Тип</span><select id="eKind">${Object.entries(KIND).map(([k, n]) => `<option value="${k}" ${k === t.kind ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label class="f"><span>Категория</span><select id="eCat">${catOptions(t.kind, t.cat)}</select></label>
+    </div>
+    <label class="f"><span>Заметка</span><input type="text" id="eNote" value="${esc(t.note || '')}" placeholder="Например: подарок маме"></label>
+    ${!t.manual && key ? `<label class="check"><input type="checkbox" id="eRemember" checked> Запомнить для «${esc(key.toLowerCase())}»${similar ? ` и поменять ещё ${similar}` : ''}</label>` : ''}
+    <div class="btns"><button class="btn primary" id="eSave">Сохранить</button><button class="btn" id="eClose">Закрыть</button></div>
+    ${t.manual ? '<button class="btn danger" id="eDel">Удалить операцию</button>' : ''}
+  `, root => {
+    const kindSel = root.querySelector('#eKind'), catSel = root.querySelector('#eCat');
+    kindSel.onchange = () => { catSel.innerHTML = catOptions(kindSel.value, null); };
+    root.querySelector('#eClose').onclick = () => sheet.close();
+    root.querySelector('#eSave').onclick = () => {
+      const kind = kindSel.value, cat = catSel.value, note = root.querySelector('#eNote').value.trim();
+      const before = { ...t };
+      if (t.manual) {
+        const amt = Math.round(parseFloat(String(root.querySelector('#eAmt').value).replace(',', '.')) * 100);
+        const date = root.querySelector('#eDate').value || t.date;
+        if (!amt) { toast('Введите сумму'); return; }
+        dropTx(before);
+        t.date = date; t.cents = kind === 'expense' ? -Math.abs(amt) : kind === 'income' ? Math.abs(amt) : (t.cents < 0 ? -Math.abs(amt) : Math.abs(amt));
+      }
+      t.kind = kind; t.cat = cat; t.edited = true;
+      if (note) t.note = note; else delete t.note;
+      putTx(t);
+      const rem = root.querySelector('#eRemember');
+      if (rem && rem.checked && key) {
+        S.meta.rules[key] = { kind, cat }; saveMeta();
+        for (const x of allTx()) if (x.id !== t.id && !x.manual && !x.link && Ledger.placeKey(x) === key && (x.kind !== kind || x.cat !== cat)) { x.kind = kind; x.cat = cat; putTx(x); }
+      }
+      sheet.close(); render(); toast('Сохранено');
+    };
+    const del = root.querySelector('#eDel');
+    if (del) del.onclick = () => {
+      if (del.dataset.armed) { dropTx(t); sheet.close(); render(); toast('Операция удалена'); }
+      else { del.dataset.armed = '1'; del.textContent = 'Нажмите ещё раз, чтобы удалить'; }
+    };
+  });
+}
+
+function openAdd() {
+  const accs = accountBalances();
+  openSheet(`
+    <h3>Новая операция</h3>
+    <div class="seg" id="aKind">${Object.entries(KIND).map(([k, n], i) => `<button data-k="${k}" aria-pressed="${i === 0}">${n}</button>`).join('')}</div>
+    <div class="fgrid">
+      <label class="f"><span>Сумма</span><input type="number" id="aAmt" inputmode="decimal" step="0.01" placeholder="0"></label>
+      <label class="f"><span>Дата</span><input type="date" id="aDate" value="${today()}"></label>
+    </div>
+    <div class="fgrid">
+      <label class="f"><span>Категория</span><select id="aCat">${catOptions('expense', 'Продукты')}</select></label>
+      <label class="f"><span>Откуда</span><select id="aAcc">${accs.map(a => `<option value="${esc(a.key)}" ${a.key === 'cash' ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+    </div>
+    <label class="f"><span>Что это</span><input type="text" id="aNote" placeholder="Например: рынок, такси, обед"></label>
+    <div class="btns"><button class="btn primary" id="aSave">Добавить</button><button class="btn" id="aClose">Отмена</button></div>
+    <div class="note">Наличные лучше добавлять вручную: их нет в выписках. Для карт ручная трата нужна, только если выписки за этот день ещё нет, иначе она посчитается дважды.</div>
+  `, root => {
+    let kind = 'expense';
+    root.querySelectorAll('#aKind button').forEach(b => b.onclick = () => {
+      kind = b.dataset.k;
+      root.querySelectorAll('#aKind button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+      root.querySelector('#aCat').innerHTML = catOptions(kind, null);
+    });
+    root.querySelector('#aClose').onclick = () => sheet.close();
+    root.querySelector('#aAmt').focus();
+    root.querySelector('#aSave').onclick = () => {
+      const amt = Math.round(parseFloat(String(root.querySelector('#aAmt').value).replace(',', '.')) * 100);
+      if (!amt || amt < 0) { toast('Введите сумму больше нуля'); return; }
+      const accKey = root.querySelector('#aAcc').value;
+      const acc = accs.find(a => a.key === accKey);
+      const tx = { id: 'm_' + uid(), manual: true, acc: accKey, bank: acc ? acc.bank : 'cash', cur: acc ? acc.cur : 'KZT',
+        date: root.querySelector('#aDate').value || today(), cents: kind === 'income' ? amt : -amt, op: '', det: '',
+        kind, cat: root.querySelector('#aCat').value };
+      const note = root.querySelector('#aNote').value.trim();
+      if (note) tx.note = note;
+      putTx(tx); S.month = monthOf(tx.date); sheet.close(); render(); toast('Добавлено');
+    };
+  });
+}
+
+function openDeposit(dep) {
+  const d = dep || { id: 'd_' + uid(), name: '', bank: 'freedom', cur: 'KZT', cents: 0, date: today(), rate: '', auto: true };
+  openSheet(`
+    <h3>${dep ? 'Депозит' : 'Новый депозит'}</h3>
+    <label class="f"><span>Название</span><input type="text" id="dName" value="${esc(d.name)}" placeholder="Например: Freedom Сберегательный"></label>
+    <div class="fgrid">
+      <label class="f"><span>Банк</span><select id="dBank">${['freedom', 'kaspi', 'other'].map(b => `<option value="${b}" ${b === d.bank ? 'selected' : ''}>${BANKS[b]}</option>`).join('')}</select></label>
+      <label class="f"><span>Валюта</span><select id="dCur">${['KZT', 'USD', 'EUR', 'RUB'].map(c => `<option ${c === d.cur ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+    </div>
+    <div class="fgrid">
+      <label class="f"><span>Остаток</span><input type="number" id="dAmt" inputmode="decimal" step="0.01" value="${d.cents ? d.cents / 100 : ''}" placeholder="0"></label>
+      <label class="f"><span>На дату</span><input type="date" id="dDate" value="${d.date}"></label>
+    </div>
+    <label class="f"><span>Ставка, % годовых</span><input type="number" id="dRate" inputmode="decimal" step="0.01" value="${d.rate || ''}" placeholder="Например: 14,5"></label>
+    <label class="check"><input type="checkbox" id="dAuto" ${d.auto ? 'checked' : ''}> Учитывать пополнения и снятия по вкладу из выписок этого банка</label>
+    <div class="note">Остаток возьмите из приложения банка. После этой даты приложение само прибавит пополнения вклада с карты и вычтет переводы с вклада на карту. Проценты показываются как оценка по ставке.</div>
+    <div class="btns"><button class="btn primary" id="dSave">Сохранить</button><button class="btn" id="dClose">Отмена</button></div>
+    ${dep ? '<button class="btn danger" id="dDel">Удалить депозит</button>' : ''}
+  `, root => {
+    root.querySelector('#dClose').onclick = () => sheet.close();
+    root.querySelector('#dSave').onclick = () => {
+      const name = root.querySelector('#dName').value.trim() || 'Депозит';
+      const amt = Math.round(parseFloat(String(root.querySelector('#dAmt').value || '0').replace(',', '.')) * 100) || 0;
+      const rate = parseFloat(String(root.querySelector('#dRate').value || '').replace(',', '.')) || 0;
+      Object.assign(d, { name, bank: root.querySelector('#dBank').value, cur: root.querySelector('#dCur').value, cents: amt,
+        date: root.querySelector('#dDate').value || today(), rate, auto: root.querySelector('#dAuto').checked });
+      S.meta.deposits = (S.meta.deposits || []).filter(x => x.id !== d.id).concat([d]);
+      saveMeta(); sheet.close(); render(); toast('Депозит сохранён');
+    };
+    const del = root.querySelector('#dDel');
+    if (del) del.onclick = () => {
+      if (del.dataset.armed) { S.meta.deposits = S.meta.deposits.filter(x => x.id !== d.id); saveMeta(); sheet.close(); render(); }
+      else { del.dataset.armed = '1'; del.textContent = 'Нажмите ещё раз, чтобы удалить'; }
+    };
+  });
+}
+
+function openCash() {
+  const c = S.meta.cash || { cents: 0, date: today() };
+  openSheet(`<h3>Наличные</h3>
+    <div class="fgrid"><label class="f"><span>Сколько сейчас, ₸</span><input type="number" id="cAmt" inputmode="decimal" value="${c.cents / 100 || ''}"></label>
+    <label class="f"><span>Дата</span><input type="date" id="cDate" value="${today()}"></label></div>
+    <div class="note">Ручные траты наличными после этой даты будут вычитаться из суммы.</div>
+    <div class="btns"><button class="btn primary" id="cSave">Сохранить</button><button class="btn" id="cClose">Отмена</button></div>`, root => {
+    root.querySelector('#cClose').onclick = () => sheet.close();
+    root.querySelector('#cSave').onclick = () => {
+      S.meta.cash = { cents: Math.round(parseFloat(String(root.querySelector('#cAmt').value || '0').replace(',', '.')) * 100) || 0, date: root.querySelector('#cDate').value || today() };
+      saveMeta(); sheet.close(); render();
+    };
+  });
+}
+
+/* ---------- Импорт PDF ---------- */
+async function pdfItems(buf) {
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise;
+  const items = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const tc = await (await doc.getPage(p)).getTextContent();
+    for (const i of tc.items) if (i.str && i.str.trim()) items.push({ page: p, x: i.transform[4], y: i.transform[5], s: i.str });
+  }
+  return items;
+}
+
+async function handleFiles(files) {
+  if (!files.length) return;
+  if (!window.pdfjsLib) { S.pendingImport = { file: files[0].name, error: 'Модуль чтения PDF не загрузился. Проверьте интернет и откройте страницу заново.' }; render(); return; }
+  S.pendingImport = null;
+  $('#preview').innerHTML = '<div class="card"><div class="muted">Читаю выписку…</div></div>';
+  const existing = new Map(allTx().map(t => [t.id, t]));
+  const items = [];
+  for (const f of files) {
+    try {
+      const st = StatementParser.parse(await pdfItems(await f.arrayBuffer()));
+      if (!st) { S.pendingImport = { file: f.name, error: 'Это не похоже на выписку Kaspi Gold или Freedom Bank. Скачайте выписку в приложении банка в формате PDF.' }; render(); return; }
+      if (!st.rows.length) { S.pendingImport = { file: f.name, error: 'В файле не нашлось ни одной операции.' }; render(); return; }
+      const impId = 'imp_' + uid();
+      const txs = Ledger.fromStatement(st, S.meta.rules, impId);
+      const fresh = txs.filter(t => !existing.has(t.id));
+      items.push({ file: f.name, st, rec: Ledger.reconcile(st), fresh, dup: txs.length - fresh.length, impId, links: 0 });
+      for (const t of fresh) existing.set(t.id, t);
+    } catch (e) {
+      S.pendingImport = { file: f.name, error: 'Не удалось открыть PDF. Если файл защищён паролем, скачайте выписку заново без пароля.' }; render(); return;
+    }
+  }
+  // Ищем переводы между своими картами среди новых и ещё не связанных старых операций.
+  const freshSet = new Set(items.flatMap(it => it.fresh));
+  const pool = [...freshSet, ...allTx().filter(t => !t.link && !t.manual && !t.edited).map(t => ({ ...t, _orig: true }))];
+  const links = Ledger.linkTransfers(pool);
+  const touched = [];
+  for (const [a, b] of links) for (const x of [a, b]) {
+    const it = items.find(i => i.fresh.includes(x));
+    if (it) it.links++; else if (x._orig) touched.push(x);
+  }
+  S.pendingImport = { items, touched };
+  render();
+}
+
+function commitImport() {
+  const p = S.pendingImport;
+  if (!p || p.error) return;
+  let added = 0;
+  for (const it of p.items) {
+    for (const t of it.fresh) { putTx(t); added++; }
+    const prev = {};
+    for (const b of it.st.balances) {
+      const old = S.meta.accounts[b.key];
+      if (!old || old.date <= b.date) { prev[b.key] = old || null; S.meta.accounts[b.key] = { name: b.name, bank: b.bank, cur: b.cur, cents: b.cents, date: b.date }; }
+    }
+    const auto = Ledger.ratesFromConversions(it.fresh);
+    for (const r of auto) if (!S.meta.rates.some(x => x.cur === r.cur && x.date === r.date)) S.meta.rates.push(r);
+    S.meta.imports.push({ id: it.impId, bank: it.st.bank, from: it.st.period?.from || it.fresh[it.fresh.length - 1]?.date || today(),
+      to: it.st.period?.to || today(), at: new Date().toISOString(), added: it.fresh.length, prev });
+  }
+  for (const x of p.touched) { const t = { ...x }; delete t._orig; putTx(t); }
+  saveMeta();
+  S.pendingImport = null;
+  const latest = p.items.flatMap(i => i.fresh).map(t => t.date).sort().pop();
+  if (latest) S.month = monthOf(latest);
+  S.view = 'overview'; render();
+  toast(`Загружено операций: ${added}`);
+}
+
+function undoImport(id) {
+  const imp = S.meta.imports.find(i => i.id === id);
+  if (!imp) return;
+  const gone = allTx().filter(t => t.imp === id);
+  const goneIds = new Set(gone.map(t => t.id));
+  for (const t of gone) dropTx(t);
+  for (const t of allTx()) if (t.link && goneIds.has(t.link)) {
+    delete t.link; Object.assign(t, Ledger.classify(t, S.meta.rules)); putTx(t);
+  }
+  for (const [k, v] of Object.entries(imp.prev || {})) { if (v) S.meta.accounts[k] = v; else delete S.meta.accounts[k]; }
+  S.meta.imports = S.meta.imports.filter(i => i.id !== id);
+  saveMeta(); render(); toast(`Удалено операций: ${gone.length}`);
+}
+
+/* ---------- Резервная копия ---------- */
+async function exportBackup() {
+  const data = JSON.stringify({ app: 'svodny-koshelek', v: 1, at: new Date().toISOString(), meta: S.meta, months: S.months });
+  const name = `koshelek-${today()}.json`;
+  const file = new File([data], name, { type: 'application/json' });
+  const done = msg => { S.meta.lastBackup = today(); saveMeta(); render(); toast(msg); };
+  try {
+    const dl = await window.claude?.use?.('downloads');
+    if (dl) { const r = await dl.save({ filename: name, data: file }); if (r && r.status === 'saved') done('Копия сохранена'); return; }
+  } catch (e) { if (e && e.code !== 'unavailable') return; }
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); done('Копия сохранена'); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  if (!window.claude) try {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); done('Файл сохранён в «Загрузки»'); return;
+  } catch {}
+  openSheet(`<h3>Резервная копия</h3><div class="note">Сохранить файл из этого окна нельзя. Скопируйте текст и сохраните его в Заметки или Файлы.</div>
+    <textarea rows="8" readonly id="bkTxt">${esc(data)}</textarea><div class="btns"><button class="btn primary" id="bkCopy">Скопировать</button><button class="btn" id="bkClose">Закрыть</button></div>`, root => {
+    root.querySelector('#bkClose').onclick = () => sheet.close();
+    root.querySelector('#bkCopy').onclick = () => {
+      navigator.clipboard.writeText(data).then(() => toast('Скопировано'), () => { const t = root.querySelector('#bkTxt'); t.focus(); t.select(); });
+    };
+  });
+}
+async function importBackup(file) {
+  try {
+    const d = JSON.parse(await file.text());
+    if (d.app !== 'svodny-koshelek' || !d.months) throw 0;
+    let n = 0;
+    for (const m of Object.values(d.months)) for (const t of Object.values(m)) { if (!findTx(t.id)) n++; putTx(t); }
+    S.meta = { ...S.meta, ...d.meta, rules: { ...S.meta.rules, ...(d.meta?.rules || {}) } };
+    saveMeta(); render(); toast(`Восстановлено. Новых операций: ${n}`);
+  } catch { toast('Это не файл резервной копии этого приложения'); }
+}
+function wipe(btn) {
+  if (!btn.dataset.armed) { btn.dataset.armed = '1'; btn.textContent = 'Точно удалить всё? Нажмите ещё раз'; return; }
+  for (const id of Object.keys(S.months)) { S.months[id] = {}; markDirty(id); }
+  S.meta = { accounts: {}, deposits: [], rates: [], rules: {}, imports: [], cash: { cents: 0, date: today() } };
+  saveMeta(); render(); toast('Все данные удалены');
+}
+
+/* ---------- События ---------- */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-v],[data-go],[data-act],[data-tx],[data-cat],[data-undo],[data-dep],[data-delrate],#opsFilter button');
+  if (!el) return;
+  if (el.dataset.v || el.dataset.go) { S.view = el.dataset.v || el.dataset.go; S.shown = 80; render(); window.scrollTo(0, 0); return; }
+  if (el.dataset.f) { S.filter = el.dataset.f; S.shown = 80; render(); return; }
+  if (el.dataset.tx) { const t = findTx(el.dataset.tx); if (t) openTx(t); return; }
+  if (el.dataset.cat) { S.cat = el.dataset.cat; S.filter = 'expense'; S.view = 'ops'; render(); window.scrollTo(0, 0); return; }
+  if (el.dataset.undo) {
+    if (el.dataset.armed) undoImport(el.dataset.undo);
+    else { el.dataset.armed = '1'; el.textContent = 'Точно?'; }
+    return;
+  }
+  if (el.dataset.dep) { openDeposit((S.meta.deposits || []).find(d => d.id === el.dataset.dep)); return; }
+  if (el.dataset.delrate) { const [c, d] = el.dataset.delrate.split('|'); S.meta.rates = S.meta.rates.filter(r => !(r.cur === c && r.date === d)); saveMeta(); render(); return; }
+  const a = el.dataset.act;
+  if (a === 'add') openAdd();
+  if (a === 'more') { S.shown += 80; render(); }
+  if (a === 'clearcat') { S.cat = null; render(); }
+  if (a === 'commit') commitImport();
+  if (a === 'cancelimp') { S.pendingImport = null; render(); }
+  if (a === 'adddep') openDeposit(null);
+  if (a === 'cash') openCash();
+  if (a === 'export') exportBackup();
+  if (a === 'wipe') wipe(el);
+  if (a === 'addrate') {
+    const rate = parseFloat(String($('#rVal').value).replace(',', '.'));
+    if (!rate || rate <= 0) { toast('Введите курс, например 520'); return; }
+    const r = { cur: $('#rCur').value, date: $('#rDate').value || today(), rate };
+    S.meta.rates = S.meta.rates.filter(x => !(x.cur === r.cur && x.date === r.date)).concat([r]);
+    saveMeta(); render(); toast('Курс добавлен');
+  }
+});
+$('#addBtn').onclick = openAdd;
+$('#mPrev').onclick = () => { S.month = shiftMonth(S.month, -1); S.shown = 80; render(); };
+$('#mNext').onclick = () => { S.month = shiftMonth(S.month, 1); S.shown = 80; render(); };
+$('#q').addEventListener('input', e => { S.q = e.target.value; S.shown = 80; renderOps(); });
+$('#pdfIn').addEventListener('change', e => { handleFiles([...e.target.files]); e.target.value = ''; });
+document.addEventListener('change', e => { if (e.target.id === 'backupIn' && e.target.files[0]) { importBackup(e.target.files[0]); e.target.value = ''; } });
+const drop = $('#drop');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); handleFiles([...e.dataTransfer.files].filter(f => /pdf$/i.test(f.name) || f.type === 'application/pdf')); });
+
+initStore();
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+
+</body>
+</html>
