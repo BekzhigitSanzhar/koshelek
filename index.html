@@ -573,7 +573,53 @@ const Ledger = (() => {
       .sort((a, b) => a.avg - b.avg);
   }
 
-  return { CATEGORIES, classify, placeKey, fromStatement, linkTransfers, ratesFromConversions, rateFor, toKZT, reconcile, recurring };
+  // Сумма из строки Apple Pay или SMS: «₸2 500,00», «2 500,00 ₸», «KZT 2,500.00», «1 200 тг».
+  function parseMoney(s) {
+    const t = String(s).replace(/[  ]/g, ' ');
+    const m = t.match(/(?:[₸$€₽]|KZT|USD|EUR|RUB|тг|T\b)?\s*(\d[\d ,.']*\d|\d)\s*(?:[₸$€₽]|KZT|USD|EUR|RUB|тг\.?|T\b)?/i);
+    if (!m) return null;
+    let num = m[1].replace(/['\s]/g, ''), dec = 0;
+    const dm = num.match(/[.,](\d{1,2})$/);
+    if (dm) { dec = parseInt(dm[1].padEnd(2, '0'), 10); num = num.slice(0, -dm[0].length); }
+    const cur = /USD|\$/.test(m[0]) ? 'USD' : /EUR|€/.test(m[0]) ? 'EUR' : /RUB|₽/.test(m[0]) ? 'RUB' : 'KZT';
+    return { cents: parseInt(num.replace(/[.,]/g, '') || '0', 10) * 100 + dec, cur };
+  }
+
+  // Быстрая трата из «Команд». Apple Pay присылает «сумма | продавец | карта», SMS — свой текст целиком.
+  function parseQuick(text, src, rules) {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+    let amountPart, merchant = '', card = '', income = false;
+    if (raw.includes('|')) {
+      [amountPart, merchant = '', card = ''] = raw.split('|').map(s => s.trim());
+    } else {
+      // SMS: ищем сумму рядом с валютой, продавец — текст после суммы до слов про баланс.
+      const m = raw.match(/(?:[₸$€₽]|KZT|USD|EUR|RUB)\s*\d[\d ,.]*|\d[\d ,.]*\s*(?:[₸$€₽]|KZT|USD|EUR|RUB|тг)/i);
+      if (!m) return null;
+      amountPart = m[0];
+      merchant = raw.slice(m.index + m[0].length).split(/Баланс|Доступно|Остаток|Карта\s*\*|Дост\./i)[0]
+        .replace(/^[\s.,:;-]+|[\s.,:;-]+$/g, '').slice(0, 80);
+      income = /пополн|зачисл|поступ|получен|входящ|возврат/i.test(raw);
+      card = raw;
+      if (!merchant) merchant = (raw.match(/(Покупка|Оплата|Перевод|Пополнение|Снятие)[^\d]*/i) || [''])[0].trim();
+    }
+    const money = parseMoney(amountPart);
+    if (!money || !money.cents) return null;
+    const bank = /kaspi|каспи/i.test(card) ? 'kaspi' : /freedom|фридом|ffin/i.test(card) ? 'freedom' : 'other';
+    const isTransfer = !raw.includes('|') && /перевод/i.test(raw);
+    const tx = { cents: income ? money.cents : -money.cents, cur: money.cur, bank, det: merchant,
+      op: income ? 'Пополнение' : isTransfer ? 'Перевод' : 'Покупка', src: src || (raw.includes('|') ? 'applepay' : 'sms') };
+    Object.assign(tx, classify(tx, rules));
+    return tx;
+  }
+
+  // Быстрая трата, которая позже пришла в выписке: та же сумма, тот же знак, разница не больше двух дней.
+  function matchQuick(stmtTx, quick) {
+    return quick.find(q => !q._used && q.cents === stmtTx.cents && q.cur === stmtTx.cur &&
+      (q.bank === 'other' || q.bank === stmtTx.bank) && dayDiff(q.date, stmtTx.date) <= 2);
+  }
+
+  return { CATEGORIES, classify, parseMoney, parseQuick, matchQuick, placeKey, fromStatement, linkTransfers, ratesFromConversions, rateFor, toKZT, reconcile, recurring };
 })();
 if (typeof module !== 'undefined') module.exports = Ledger;
 
@@ -677,6 +723,7 @@ function loadLocal() {
 // если там что-то осталось, переносим на устройство и стираем из аккаунта.
 async function initStore() {
   S.mode = 'local'; loadLocal(); jumpToLatestMonth(); render();
+  takeQuickFromUrl();
   let db = null, user = null, id = null;
   try { [db, user] = await Promise.all([window.claude?.use?.('db'), window.claude?.use?.('user')]); } catch {}
   try { id = user ? await user.id() : null; } catch {}
@@ -965,7 +1012,7 @@ function txRow(t, last) {
     t.pending ? '<span class="pill plain">в обработке</span>' : '',
     t.link ? '<span class="pill">перевод себе</span>' : '',
     t.cur !== 'KZT' ? (v == null ? '<span class="pill bad">нет курса</span>' : `<span class="num">≈ ${fmt(v, 'KZT')}</span>`) : '',
-    t.manual ? '<span class="pill plain">вручную</span>' : '',
+    t.quick ? `<span class="pill">${t.src === 'sms' ? 'SMS' : 'Apple Pay'}</span>` : t.manual ? '<span class="pill plain">вручную</span>' : '',
   ].join(' ');
   const amt = t.kind === 'expense' ? fmt(t.cents, t.cur, { sign: t.cents > 0 }) : fmt(t.cents, t.cur, { sign: true });
   return `<button class="tx${last ? ' last' : ''}" data-tx="${esc(t.id)}"><span class="t">${esc(txTitle(t))}</span><span class="a num ${cls}">${amt}</span><span class="s">${tags}</span></button>`;
@@ -1061,6 +1108,13 @@ function renderAccounts() {
       <div class="fgrid"><select id="rCur" aria-label="Валюта">${['USD', 'EUR', 'RUB', 'CNY', 'TRY', 'AED'].map(c => `<option>${c}</option>`).join('')}</select>
         <input type="number" id="rVal" inputmode="decimal" step="0.01" placeholder="Курс, ₸" aria-label="Курс в тенге"></div>
       <div class="fgrid"><input type="date" id="rDate" value="${today()}" aria-label="С какой даты"><button class="btn" data-act="addrate">Добавить курс</button></div>
+    </div>
+    <div class="card"><h2>Автоматический учёт</h2>
+      <div class="note">Траты по Apple Pay и SMS банка записываются сами через приложение «Команды» на iPhone. Ссылка для команды:</div>
+      <div class="orig num" id="quickUrl" style="user-select:all">${esc(location.origin + location.pathname)}?src=applepay&amp;t=</div>
+      <button class="btn" data-act="copyquick">Скопировать ссылку</button>
+      <div class="note">После неё в команде идёт текст «Сумма | Продавец | Карта», пропущенный через действие «Кодировать URL». Для SMS вместо applepay пишется sms, а после t= идёт текст сообщения.</div>
+      <div class="note">Записано автоматически в этом месяце: ${allTx().filter(t => t.quick && monthOf(t.date) === monthOf(today())).length}</div>
     </div>
     <div class="card"><h2>Резервная копия</h2>
       <div class="note">Файл со всеми операциями, счетами и правилами. Сохраните его в «Файлы» на iPhone раз в месяц.</div>
@@ -1227,6 +1281,42 @@ function openCash() {
   });
 }
 
+/* ---------- Быстрые траты из «Команд» iPhone ---------- */
+// Ссылка вида ?t=<текст>&src=applepay|sms добавляет трату сразу при оплате.
+function takeQuickFromUrl() {
+  let p;
+  try { p = new URLSearchParams(location.search); } catch { return; }
+  if (!p.has('t')) return;
+  const text = p.get('t'), src = p.get('src') || '';
+  try { history.replaceState(null, '', location.pathname); } catch {}
+  const q = Ledger.parseQuick(text, src, S.meta.rules);
+  if (!q) {
+    openSheet(`<h3>Не удалось разобрать трату</h3><div class="orig">${esc(text)}</div>
+      <div class="note">Добавьте её вручную или пришлите этот текст, чтобы я научил приложение его понимать.</div>
+      <div class="btns"><button class="btn primary" id="qAdd">Добавить вручную</button><button class="btn" id="qClose">Закрыть</button></div>`, root => {
+      root.querySelector('#qClose').onclick = () => sheet.close();
+      root.querySelector('#qAdd').onclick = () => openAdd();
+    });
+    return;
+  }
+  // Защита от повторного открытия той же ссылки: одинаковая трата в течение двух минут не добавляется дважды.
+  const now = Date.now();
+  const recent = allTx().find(t => t.quick && t.cents === q.cents && t.det === q.det && now - (t.at || 0) < 120000);
+  if (recent) { openTx(recent); return; }
+  const accKey = q.bank === 'kaspi' ? 'kaspi-gold-KZT' : q.bank === 'freedom' ? 'freedom-' + q.cur : 'cash';
+  const tx = { ...q, id: 'q_' + uid(), manual: true, quick: true, acc: accKey, date: today(), at: now };
+  putTx(tx); S.month = monthOf(tx.date); render();
+  openSheet(`<h3>${tx.cents < 0 ? 'Трата записана' : 'Поступление записано'}</h3>
+    <div class="row"><span class="mid num">${fmt(tx.cents, tx.cur, { sign: true })}</span><span class="pill">${tx.src === 'sms' ? 'из SMS' : 'Apple Pay'}</span></div>
+    <div class="orig">${esc(tx.det || '—')} · ${esc(BANKS[tx.bank] || 'карта')}</div>
+    <div class="note">Категория: <b>${esc(tx.cat)}</b>. Когда загрузите выписку, эта трата совпадёт с банковской и не посчитается дважды.</div>
+    ${budget().month || budget().day ? (() => { const a = dailyAllowance(); const r = a.allow - a.spentToday; return `<div class="today ${r < 0 ? 'over' : ''}"><span class="small muted">${r >= 0 ? 'Сегодня можно ещё' : 'Сегодня сверх лимита'}</span><span class="mid num">${fmt(Math.abs(r), 'KZT', { whole: true })}</span></div>`; })() : ''}
+    <div class="btns"><button class="btn primary" id="qOk">Готово</button><button class="btn" id="qEdit">Изменить</button></div>`, root => {
+    root.querySelector('#qOk').onclick = () => sheet.close();
+    root.querySelector('#qEdit').onclick = () => openTx(tx);
+  });
+}
+
 /* ---------- Импорт PDF ---------- */
 async function pdfItems(buf) {
   const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise;
@@ -1275,9 +1365,19 @@ async function handleFiles(files) {
 function commitImport() {
   const p = S.pendingImport;
   if (!p || p.error) return;
-  let added = 0;
+  let added = 0, matched = 0;
+  const quick = allTx().filter(t => t.quick);
   for (const it of p.items) {
-    for (const t of it.fresh) { putTx(t); added++; }
+    for (const t of it.fresh) {
+      // Трата из Apple Pay или SMS уже записана — оставляем банковскую строку, переносим правки и заметку.
+      const q = Ledger.matchQuick(t, quick);
+      if (q) {
+        q._used = true; dropTx(q); matched++;
+        if (q.edited) { t.kind = q.kind; t.cat = q.cat; t.edited = true; }
+        if (q.note) t.note = q.note;
+      }
+      putTx(t); added++;
+    }
     const prev = {};
     for (const b of it.st.balances) {
       const old = S.meta.accounts[b.key];
@@ -1294,7 +1394,7 @@ function commitImport() {
   const latest = p.items.flatMap(i => i.fresh).map(t => t.date).sort().pop();
   if (latest) S.month = monthOf(latest);
   S.view = 'overview'; render();
-  toast(`Загружено операций: ${added}`);
+  toast(`Загружено операций: ${added}` + (matched ? `. Совпало с Apple Pay и SMS: ${matched}` : ''));
 }
 
 function undoImport(id) {
@@ -1371,6 +1471,13 @@ document.addEventListener('click', e => {
   const a = el.dataset.act;
   if (a === 'add') openAdd();
   if (a === 'budget') openBudget();
+  if (a === 'copyquick') {
+    const txt = location.origin + location.pathname + '?src=applepay&t=';
+    navigator.clipboard.writeText(txt).then(() => toast('Ссылка скопирована'), () => {
+      const r = document.createRange(); r.selectNodeContents($('#quickUrl'));
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Выделено — нажмите «Скопировать»');
+    });
+  }
   if (a === 'more') { S.shown += 80; render(); }
   if (a === 'clearcat') { S.cat = null; render(); }
   if (a === 'commit') commitImport();
