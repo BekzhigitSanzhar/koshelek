@@ -589,9 +589,11 @@ const Ledger = (() => {
   function parseQuick(text, src, rules) {
     const raw = String(text || '').trim();
     if (!raw) return null;
-    let amountPart, merchant = '', card = '', income = false;
+    let amountPart, merchant = '', card = '', income = false, kindHint = '';
     if (raw.includes('|')) {
-      [amountPart, merchant = '', card = ''] = raw.split('|').map(s => s.trim());
+      // Четвёртое поле — тип из команды Kaspi: «Покупка», «Перевод», «Пришли деньги».
+      [amountPart, merchant = '', card = '', kindHint = ''] = raw.split('|').map(s => s.trim());
+      income = /пришл|получ|пополн|доход|возврат/i.test(kindHint);
     } else {
       // SMS: ищем сумму рядом с валютой, продавец — текст после суммы до слов про баланс.
       const m = raw.match(/(?:[₸$€₽]|KZT|USD|EUR|RUB)\s*\d[\d ,.]*|\d[\d ,.]*\s*(?:[₸$€₽]|KZT|USD|EUR|RUB|тг)/i);
@@ -606,7 +608,7 @@ const Ledger = (() => {
     const money = parseMoney(amountPart);
     if (!money || !money.cents) return null;
     const bank = /kaspi|каспи/i.test(card) ? 'kaspi' : /freedom|фридом|ffin/i.test(card) ? 'freedom' : 'other';
-    const isTransfer = !raw.includes('|') && /перевод/i.test(raw);
+    const isTransfer = raw.includes('|') ? /перевод/i.test(kindHint) : /перевод/i.test(raw);
     const tx = { cents: income ? money.cents : -money.cents, cur: money.cur, bank, det: merchant,
       op: income ? 'Пополнение' : isTransfer ? 'Перевод' : 'Покупка', src: src || (raw.includes('|') ? 'applepay' : 'sms') };
     Object.assign(tx, classify(tx, rules));
@@ -1003,6 +1005,7 @@ function short(cents) {
   return Math.round(v) + '';
 }
 
+const srcLabel = s => ({ applepay: 'Apple Pay', sms: 'SMS', kaspi: 'после Kaspi' }[s] || 'быстрая запись');
 function txTitle(t) { return t.note || t.det || t.op || 'Операция'; }
 function txRow(t, last) {
   const cls = t.kind === 'income' ? 'in' : t.kind === 'internal' ? 'int' : '';
@@ -1012,7 +1015,7 @@ function txRow(t, last) {
     t.pending ? '<span class="pill plain">в обработке</span>' : '',
     t.link ? '<span class="pill">перевод себе</span>' : '',
     t.cur !== 'KZT' ? (v == null ? '<span class="pill bad">нет курса</span>' : `<span class="num">≈ ${fmt(v, 'KZT')}</span>`) : '',
-    t.quick ? `<span class="pill">${t.src === 'sms' ? 'SMS' : 'Apple Pay'}</span>` : t.manual ? '<span class="pill plain">вручную</span>' : '',
+    t.quick ? `<span class="pill">${esc(srcLabel(t.src))}</span>` : t.manual ? '<span class="pill plain">вручную</span>' : '',
   ].join(' ');
   const amt = t.kind === 'expense' ? fmt(t.cents, t.cur, { sign: t.cents > 0 }) : fmt(t.cents, t.cur, { sign: true });
   return `<button class="tx${last ? ' last' : ''}" data-tx="${esc(t.id)}"><span class="t">${esc(txTitle(t))}</span><span class="a num ${cls}">${amt}</span><span class="s">${tags}</span></button>`;
@@ -1307,7 +1310,7 @@ function takeQuickFromUrl() {
   const tx = { ...q, id: 'q_' + uid(), manual: true, quick: true, acc: accKey, date: today(), at: now };
   putTx(tx); S.month = monthOf(tx.date); render();
   openSheet(`<h3>${tx.cents < 0 ? 'Трата записана' : 'Поступление записано'}</h3>
-    <div class="row"><span class="mid num">${fmt(tx.cents, tx.cur, { sign: true })}</span><span class="pill">${tx.src === 'sms' ? 'из SMS' : 'Apple Pay'}</span></div>
+    <div class="row"><span class="mid num">${fmt(tx.cents, tx.cur, { sign: true })}</span><span class="pill">${esc(srcLabel(tx.src))}</span></div>
     <div class="orig">${esc(tx.det || '—')} · ${esc(BANKS[tx.bank] || 'карта')}</div>
     <div class="note">Категория: <b>${esc(tx.cat)}</b>. Когда загрузите выписку, эта трата совпадёт с банковской и не посчитается дважды.</div>
     ${budget().month || budget().day ? (() => { const a = dailyAllowance(); const r = a.allow - a.spentToday; return `<div class="today ${r < 0 ? 'over' : ''}"><span class="small muted">${r >= 0 ? 'Сегодня можно ещё' : 'Сегодня сверх лимита'}</span><span class="mid num">${fmt(Math.abs(r), 'KZT', { whole: true })}</span></div>`; })() : ''}
